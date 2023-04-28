@@ -1,0 +1,126 @@
+const path = require("path");
+const dishes = require(path.resolve("src/data/dishes-data"));
+const nextId = require("../utils/nextId");
+
+function isPropertyIncluded(property) {
+  return function (req, res, next) {
+    const { data = {} } = req.body;
+
+    if (data[property]) {
+      return next();
+    } else {
+      next({
+        status: 400,
+        message: `An ${property} must be included!`,
+      });
+    }
+  };
+}
+
+function isValidPrice(req, res, next) {
+  const { data = {} } = req.body;
+  const { price } = data;
+
+  if (Number.isInteger(price) && +price > 0) {
+    res.locals.newDish = data;
+    return next();
+  } else {
+    next({
+      status: 400,
+      message: "Dish must have a price that is an integer greater than 0",
+    });
+  }
+}
+
+function doesDishExist(req, res, next) {
+  const { dishId } = req.params;
+
+  const foundDish = dishes.find((dish) => dish.id === dishId);
+
+  if (foundDish) {
+    res.locals.id = dishId;
+    res.locals.dish = foundDish;
+    res.locals.newDish = req.body.data;
+    return next();
+  } else {
+    next({
+      status: 404,
+      message: `Dish does not exist: ${dishId}.`,
+    });
+  }
+}
+
+function doesIdMatch(req, res, next) {
+  const { dishId } = req.params;
+  const { id } = req.body.data;
+
+  if (id && id !== dishId) {
+    next({
+      status: 400,
+      message: `Dish id does not match route id. Dish: ${id}, Route: ${dishId}`,
+    });
+  } else {
+    return next();
+  }
+}
+
+// route method functions
+
+function list(req, res) {
+  res.send({ data: dishes });
+}
+
+function create(req, res) {
+  const { name, description, price, image_url } = res.locals.newDish;
+
+  const newDish = {
+    name,
+    description,
+    price: +price,
+    image_url,
+    id: nextId(),
+  };
+
+  dishes.push(newDish);
+
+  res.status(201).send({ data: newDish });
+}
+
+function read(req, res) {
+  res.status(200).send({ data: res.locals.dish });
+}
+
+function update(req, res) {
+  const dish = res.locals.dish;
+  const { name, description, price, image_url } = res.locals.newDish;
+
+  dish.name = name;
+  dish.description = description;
+  dish.price = price;
+  dish.image_url = image_url;
+
+  res.status(200).send({ data: dish });
+}
+
+module.exports = {
+  list,
+  create: [
+    isPropertyIncluded("name"),
+    isPropertyIncluded("description"),
+    isPropertyIncluded("price"),
+    isPropertyIncluded("image_url"),
+    isValidPrice,
+    create,
+  ],
+  read: [doesDishExist, read],
+  update: [
+    doesDishExist,
+    doesIdMatch,
+    isPropertyIncluded("name"),
+    isPropertyIncluded("description"),
+    isPropertyIncluded("price"),
+    isPropertyIncluded("image_url"),
+    isValidPrice,
+    update,
+  ],
+};
